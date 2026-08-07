@@ -1,9 +1,9 @@
-import { ArrowLeft, Check, Copy, Link2, ChevronRight } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { dealsApi } from "@/lib/api";
+import { dealsApi, usersApi, type UserSearchResultDto } from "@/lib/api";
 
 const stepTitles = ["Детали", "Участник", "Условия", "Итог"];
 
@@ -15,16 +15,51 @@ const CreateDeal = () => {
     amount: "",
     currency: "USD",
     role: "buyer",
-    counterparty: "",
     description: "",
     deadline: "3",
     autoRelease: false,
   });
+  const [counterpartyQuery, setCounterpartyQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<UserSearchResultDto[]>([]);
+  const [selectedCounterparty, setSelectedCounterparty] = useState<UserSearchResultDto | null>(null);
+  const [searching, setSearching] = useState(false);
   const [creating, setCreating] = useState(false);
 
   const update = <K extends keyof typeof form>(field: K, value: (typeof form)[K]) => setForm({ ...form, [field]: value });
-  const next = () => setStep((s) => Math.min(s + 1, 3));
+
+  const next = () => {
+    if (step === 1 && !selectedCounterparty) {
+      toast.error("Выберите участника из списка");
+      return;
+    }
+    setStep((s) => Math.min(s + 1, 3));
+  };
   const prev = () => (step === 0 ? navigate(-1) : setStep((s) => s - 1));
+
+  useEffect(() => {
+    if (step !== 1) return;
+    if (selectedCounterparty) {
+      setSearchResults([]);
+      return;
+    }
+
+    const q = counterpartyQuery.trim();
+    if (q.length < 1) {
+      setSearchResults([]);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      void usersApi
+        .search(q)
+        .then(setSearchResults)
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [counterpartyQuery, selectedCounterparty, step]);
 
   const slideVariants = {
     enter: { x: 30, opacity: 0 },
@@ -37,6 +72,11 @@ const CreateDeal = () => {
       toast.error("Заполните название и сумму");
       return;
     }
+    if (!selectedCounterparty) {
+      toast.error("Выберите участника сделки");
+      setStep(1);
+      return;
+    }
 
     setCreating(true);
     try {
@@ -46,9 +86,18 @@ const CreateDeal = () => {
         currency: form.currency,
         description: form.description || "Без описания",
         role: form.role as "buyer" | "seller",
+        counterpartyUserId: selectedCounterparty.userId,
       });
-      toast.success("Сделка создана, переходим к оплате");
-      navigate(`/checkout/${newDeal.id}`);
+      toast.success(
+        form.role === "buyer"
+          ? "Сделка создана, переходим к оплате с баланса"
+          : "Сделка создана. Покупатель сможет оплатить с баланса.",
+      );
+      if (form.role === "buyer") {
+        navigate(`/checkout/${newDeal.id}`);
+      } else {
+        navigate(`/deal/${newDeal.id}`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось создать сделку");
     } finally {
@@ -58,32 +107,37 @@ const CreateDeal = () => {
 
   return (
     <div className="min-h-dvh bg-background pb-4 flex flex-col">
-      {/* Header */}
       <div className="gradient-dark px-5 pt-safe pb-6 rounded-b-[1.5rem]">
-        <button onClick={prev} className="mb-4 text-white/70 hover:text-white transition-colors">
+        <button type="button" onClick={prev} className="mb-4 text-white/70 hover:text-white transition-colors touch-manipulation">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-xl font-bold text-white">Создать сделку</h1>
-        <p className="text-sm text-white/50 mt-0.5">Шаг {step + 1} из {stepTitles.length}</p>
+        <p className="text-sm text-white/50 mt-0.5">
+          Шаг {step + 1} из {stepTitles.length}
+        </p>
       </div>
 
-      {/* Step Indicator */}
       <div className="px-5 py-5">
         <div className="flex items-center gap-2">
           {stepTitles.map((title, i) => (
             <div key={title} className="flex-1">
-              <div className={`h-1.5 rounded-full transition-all duration-500 ${
-                i < step ? "gradient-brand" : i === step ? "bg-brand animate-pulse-soft" : "bg-border"
-              }`} />
-              <span className={`text-[10px] font-medium mt-1.5 block text-center transition-colors ${
-                i <= step ? "text-brand font-semibold" : "text-muted-foreground"
-              }`}>{title}</span>
+              <div
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  i < step ? "gradient-brand" : i === step ? "bg-brand animate-pulse-soft" : "bg-border"
+                }`}
+              />
+              <span
+                className={`text-[10px] font-medium mt-1.5 block text-center transition-colors ${
+                  i <= step ? "text-brand font-semibold" : "text-muted-foreground"
+                }`}
+              >
+                {title}
+              </span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Steps Content */}
       <div className="px-5 flex-1">
         <AnimatePresence mode="wait">
           <motion.div
@@ -102,7 +156,7 @@ const CreateDeal = () => {
                     value={form.title}
                     onChange={(e) => update("title", e.target.value)}
                     placeholder="Например: Разработка сайта"
-                    className="w-full bg-card rounded-2xl px-4 py-3.5 text-sm text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all shadow-card"
+                    className="w-full bg-card rounded-2xl px-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all shadow-card"
                   />
                 </div>
                 <div>
@@ -114,7 +168,7 @@ const CreateDeal = () => {
                       onChange={(e) => update("amount", e.target.value)}
                       placeholder="0.00"
                       type="number"
-                      className="w-full bg-card rounded-2xl pl-9 pr-4 py-3.5 text-sm text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all font-mono shadow-card"
+                      className="w-full bg-card rounded-2xl pl-9 pr-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all font-mono shadow-card"
                     />
                   </div>
                 </div>
@@ -124,30 +178,36 @@ const CreateDeal = () => {
                     {["USD", "EUR", "RUB", "USDT"].map((c) => (
                       <button
                         key={c}
+                        type="button"
                         onClick={() => update("currency", c)}
-                        className={`flex-1 py-3 rounded-2xl text-sm font-semibold transition-all ${
+                        className={`flex-1 py-3 rounded-2xl text-sm font-semibold transition-all touch-manipulation ${
                           form.currency === c
                             ? "gradient-brand text-brand-foreground shadow-brand"
                             : "bg-card text-card-foreground border border-border shadow-card hover:border-brand/30"
                         }`}
-                      >{c}</button>
+                      >
+                        {c}
+                      </button>
                     ))}
                   </div>
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Ваша роль</label>
                   <div className="flex gap-2">
-                    {[{ v: "buyer", l: "Покупатель", emoji: "🛒" }, { v: "seller", l: "Продавец", emoji: "💼" }].map((r) => (
+                    {[
+                      { v: "buyer", l: "Покупатель" },
+                      { v: "seller", l: "Продавец" },
+                    ].map((r) => (
                       <button
                         key={r.v}
+                        type="button"
                         onClick={() => update("role", r.v)}
-                        className={`flex-1 py-3.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                        className={`flex-1 py-3.5 rounded-2xl text-sm font-semibold transition-all touch-manipulation ${
                           form.role === r.v
                             ? "gradient-brand text-brand-foreground shadow-brand"
                             : "bg-card text-card-foreground border border-border shadow-card hover:border-brand/30"
                         }`}
                       >
-                        <span>{r.emoji}</span>
                         {r.l}
                       </button>
                     ))}
@@ -159,33 +219,48 @@ const CreateDeal = () => {
             {step === 1 && (
               <div className="space-y-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Email или Username</label>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
+                    Username или контакт
+                  </label>
                   <input
-                    value={form.counterparty}
-                    onChange={(e) => update("counterparty", e.target.value)}
-                    placeholder="@username или email"
-                    className="w-full bg-card rounded-2xl px-4 py-3.5 text-sm text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all shadow-card"
+                    value={selectedCounterparty ? `@${selectedCounterparty.username}` : counterpartyQuery}
+                    onChange={(e) => {
+                      setSelectedCounterparty(null);
+                      setCounterpartyQuery(e.target.value);
+                    }}
+                    placeholder="Начните вводить имя, например jan"
+                    className="w-full bg-card rounded-2xl px-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all shadow-card"
+                    autoComplete="off"
                   />
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-0 gradient-brand rounded-2xl opacity-5" />
-                  <div className="bg-card rounded-2xl p-5 border border-brand/10 shadow-card relative">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Link2 className="w-4 h-4 text-brand" />
-                      <p className="text-sm font-semibold text-card-foreground">Ссылка-приглашение</p>
+                  {searching && <p className="text-xs text-muted-foreground mt-2">Поиск...</p>}
+                  {!selectedCounterparty && searchResults.length > 0 && (
+                    <div className="mt-2 bg-card rounded-2xl border border-border shadow-card overflow-hidden">
+                      {searchResults.map((u) => (
+                        <button
+                          key={u.userId}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCounterparty(u);
+                            setCounterpartyQuery(u.username);
+                            setSearchResults([]);
+                          }}
+                          className="w-full text-left px-4 py-3 border-b border-border last:border-b-0 hover:bg-secondary/50 active:bg-secondary touch-manipulation"
+                        >
+                          <p className="text-sm font-semibold text-card-foreground">@{u.username}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{u.contact}</p>
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-surface-sunken rounded-xl px-3 py-3 text-xs text-muted-foreground truncate font-mono">
-                        https://escrow.app/invite/abc123
-                      </div>
-                      <button
-                        onClick={() => toast.success("Ссылка скопирована")}
-                        className="gradient-brand text-brand-foreground p-3 rounded-xl shadow-brand transition-all active:scale-95"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
+                  )}
+                  {!selectedCounterparty && !searching && counterpartyQuery.trim().length > 0 && searchResults.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">Никого не найдено. Попробуйте другое имя.</p>
+                  )}
+                  {selectedCounterparty && (
+                    <div className="mt-3 bg-status-safe-muted rounded-2xl px-4 py-3">
+                      <p className="text-sm font-semibold text-status-safe">Выбран: @{selectedCounterparty.username}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{selectedCounterparty.contact}</p>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -199,7 +274,7 @@ const CreateDeal = () => {
                     onChange={(e) => update("description", e.target.value)}
                     placeholder="Опишите что должен сделать продавец..."
                     rows={4}
-                    className="w-full bg-card rounded-2xl px-4 py-3.5 text-sm text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all resize-none shadow-card"
+                    className="w-full bg-card rounded-2xl px-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand focus:shadow-brand transition-all resize-none shadow-card"
                   />
                 </div>
                 <div>
@@ -208,13 +283,16 @@ const CreateDeal = () => {
                     {["1", "3", "7", "14"].map((d) => (
                       <button
                         key={d}
+                        type="button"
                         onClick={() => update("deadline", d)}
-                        className={`flex-1 py-3 rounded-2xl text-sm font-semibold transition-all ${
+                        className={`flex-1 py-3 rounded-2xl text-sm font-semibold transition-all touch-manipulation ${
                           form.deadline === d
                             ? "gradient-brand text-brand-foreground shadow-brand"
                             : "bg-card text-card-foreground border border-border shadow-card"
                         }`}
-                      >{d} {Number(d) === 1 ? "день" : Number(d) < 5 ? "дня" : "дней"}</button>
+                      >
+                        {d} {Number(d) === 1 ? "день" : Number(d) < 5 ? "дня" : "дней"}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -224,6 +302,7 @@ const CreateDeal = () => {
                     <p className="text-xs text-muted-foreground mt-0.5">Автоматически после срока</p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => update("autoRelease", !form.autoRelease)}
                     className={`w-14 h-8 rounded-full transition-all duration-300 flex items-center ${
                       form.autoRelease ? "gradient-brand shadow-brand" : "bg-border"
@@ -247,13 +326,13 @@ const CreateDeal = () => {
                     { label: "Название", value: form.title || "—" },
                     { label: "Сумма", value: form.amount ? `$${form.amount}` : "—", mono: true },
                     { label: "Комиссия (2%)", value: form.amount ? `$${(Number(form.amount) * 0.02).toFixed(2)}` : "—", mono: true },
-                    { label: "Участник", value: form.counterparty || "—" },
+                    { label: "Участник", value: selectedCounterparty ? `@${selectedCounterparty.username}` : "—" },
                     { label: "Роль", value: form.role === "buyer" ? "Покупатель" : "Продавец" },
                     { label: "Срок", value: `${form.deadline} дн.` },
                   ].map((row) => (
-                    <div key={row.label} className="flex justify-between items-center text-sm">
+                    <div key={row.label} className="flex justify-between items-center text-sm gap-3">
                       <span className="text-muted-foreground">{row.label}</span>
-                      <span className={`font-semibold text-card-foreground ${row.mono ? "font-mono" : ""}`}>{row.value}</span>
+                      <span className={`font-semibold text-card-foreground text-right ${row.mono ? "font-mono" : ""}`}>{row.value}</span>
                     </div>
                   ))}
                   <div className="h-px bg-border" />
@@ -264,10 +343,9 @@ const CreateDeal = () => {
                     </span>
                   </div>
                 </div>
-                <div className="bg-status-safe-muted rounded-2xl p-4 flex items-start gap-3">
-                  <span className="text-lg">🔒</span>
+                <div className="bg-status-safe-muted rounded-2xl p-4">
                   <p className="text-sm text-status-safe leading-relaxed">
-                    Деньги будут заморожены на эскроу-счёте до подтверждения выполнения обеими сторонами.
+                    Оплата идёт с баланса (имитация, без Stripe). Деньги замораживаются в эскроу до подтверждения.
                   </p>
                 </div>
               </div>
@@ -276,11 +354,10 @@ const CreateDeal = () => {
         </AnimatePresence>
       </div>
 
-      {/* Bottom Button */}
       <div className="px-5 mt-6 pb-safe-input">
         <button
           type="button"
-          onClick={step === 3 ? createDeal : next}
+          onClick={step === 3 ? () => void createDeal() : next}
           disabled={creating}
           className="w-full gradient-brand text-brand-foreground font-bold py-4 rounded-2xl text-base transition-all active:scale-[0.97] shadow-brand touch-manipulation"
         >

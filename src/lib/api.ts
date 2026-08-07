@@ -3,8 +3,6 @@ const runtimeApiBaseUrl =
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || runtimeApiBaseUrl;
 const API_VERSION = "v1";
 
-export const DEMO_BUYER_ID = "11111111-1111-1111-1111-111111111111";
-export const DEMO_SELLER_ID = "22222222-2222-2222-2222-222222222222";
 const TOKEN_STORAGE_KEY = "onlinedeal_mobile_access_token";
 const USER_STORAGE_KEY = "onlinedeal_mobile_user";
 
@@ -26,15 +24,16 @@ let currentUser: Omit<AuthResponse, "accessToken"> | null = (() => {
   }
 })();
 
-export interface CreateIntentPayload {
-  amount: number;
+export interface WalletBalanceDto {
+  availableBalance: number;
+  frozenBalance: number;
   currency: string;
-  dealId: string;
 }
 
-export interface CreateIntentResponse {
-  clientSecret: string;
-  paymentIntentId: string;
+export interface UserSearchResultDto {
+  userId: string;
+  username: string;
+  contact: string;
 }
 
 export interface DealDto {
@@ -62,6 +61,7 @@ export interface CreateDealPayload {
   amount: number;
   currency: string;
   role: "buyer" | "seller";
+  counterpartyUserId: string;
 }
 
 const readError = async (response: Response) => {
@@ -148,13 +148,83 @@ export const ensureAuth = async (): Promise<void> => {
   }
 };
 
+export const walletApi = {
+  async me(): Promise<WalletBalanceDto> {
+    await ensureAuth();
+    const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/wallet/me`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorWithAuthHandling(response));
+    }
+    return response.json() as Promise<WalletBalanceDto>;
+  },
+
+  async topUp(amount: number): Promise<WalletBalanceDto> {
+    await ensureAuth();
+    const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/wallet/top-up`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ amount }),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorWithAuthHandling(response));
+    }
+    return response.json() as Promise<WalletBalanceDto>;
+  },
+
+  async withdraw(amount: number): Promise<WalletBalanceDto> {
+    await ensureAuth();
+    const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/wallet/withdraw`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ amount }),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorWithAuthHandling(response));
+    }
+    return response.json() as Promise<WalletBalanceDto>;
+  },
+
+  async transfer(toUserId: string, amount: number): Promise<WalletBalanceDto> {
+    await ensureAuth();
+    const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/wallet/transfer`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ toUserId, amount }),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorWithAuthHandling(response));
+    }
+    return response.json() as Promise<WalletBalanceDto>;
+  },
+};
+
+export const usersApi = {
+  async search(query: string, limit = 8): Promise<UserSearchResultDto[]> {
+    await ensureAuth();
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/users/search?${params}`, {
+      headers: authHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorWithAuthHandling(response));
+    }
+    return response.json() as Promise<UserSearchResultDto[]>;
+  },
+};
+
 export const dealsApi = {
   async create(payload: CreateDealPayload): Promise<DealDto> {
     await ensureAuth();
     if (!currentUser) throw new Error("Пользователь не найден. Войдите заново.");
+    if (!payload.counterpartyUserId) {
+      throw new Error("Выберите участника сделки");
+    }
+
     const body = {
-      buyerId: payload.role === "buyer" ? currentUser.userId : DEMO_BUYER_ID,
-      sellerId: payload.role === "buyer" ? DEMO_SELLER_ID : currentUser.userId,
+      buyerId: payload.role === "buyer" ? currentUser.userId : payload.counterpartyUserId,
+      sellerId: payload.role === "buyer" ? payload.counterpartyUserId : currentUser.userId,
       title: payload.title,
       description: payload.description,
       amount: payload.amount,
@@ -267,18 +337,33 @@ export const dealsApi = {
 };
 
 export const paymentsApi = {
-  async createIntent(payload: CreateIntentPayload): Promise<CreateIntentResponse> {
+  /**
+   * Simulated escrow funding from wallet balance.
+   * STRIPE_RESTORE: swap this for createIntent + Stripe Elements confirmPayment.
+   */
+  async mockPay(dealId: string): Promise<void> {
+    await ensureAuth();
+    const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/payments/mock-pay/${dealId}`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await readErrorWithAuthHandling(response));
+    }
+  },
+
+  /*
+  // ===== STRIPE_RESTORE =====
+  async createIntent(payload: { amount: number; currency: string; dealId: string }) {
     await ensureAuth();
     const response = await fetch(`${API_BASE_URL}/api/${API_VERSION}/payments/create-intent`, {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify(payload),
     });
-
-    if (!response.ok) {
-      throw new Error(await readErrorWithAuthHandling(response));
-    }
-
-    return response.json() as Promise<CreateIntentResponse>;
+    if (!response.ok) throw new Error(await readErrorWithAuthHandling(response));
+    return response.json() as Promise<{ clientSecret: string; paymentIntentId: string }>;
   },
+  // ===== END STRIPE_RESTORE =====
+  */
 };

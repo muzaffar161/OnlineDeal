@@ -236,35 +236,48 @@ const DealScreen = () => {
       </div>
 
       {/* Action Buttons */}
-      <div className="px-5 flex gap-3">
+      <div className="px-5 flex gap-3 flex-wrap">
+        {(deal.status === 1 || deal.status === 2) && isBuyer && (
+          <button
+            type="button"
+            onClick={() => navigate(`/checkout/${deal.id}`)}
+            className="flex-1 min-w-[45%] gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
+          >
+            Оплатить с баланса
+          </button>
+        )}
         {deal.status === 1 && isSeller && (
           <button
+            type="button"
             onClick={() => runAction(() => dealsApi.accept(deal.id, user?.userId ?? ""), "Сделка принята")}
-            className="flex-1 gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
+            className="flex-1 min-w-[45%] gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
           >
             Принять сделку
           </button>
         )}
         {deal.status === 3 && isSeller && (
           <button
+            type="button"
             onClick={() => runAction(() => dealsApi.markDone(deal.id, user?.userId ?? ""), "Работа отмечена как выполненная")}
-            className="flex-1 gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
+            className="flex-1 min-w-[45%] gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
           >
             Отметить выполненной
           </button>
         )}
         {deal.status === 4 && isBuyer && (
           <button
+            type="button"
             onClick={() => runAction(() => dealsApi.confirm(deal.id, user?.userId ?? "", Number(deal.amount) * 0.02), "Сделка подтверждена")}
-            className="flex-1 gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
+            className="flex-1 min-w-[45%] gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] shadow-brand"
           >
             Подтвердить
           </button>
         )}
         {(deal.status === 3 || deal.status === 4) && isBuyer && (
           <button
+            type="button"
             onClick={() => runAction(() => dealsApi.dispute(deal.id, user?.userId ?? ""), "Спор открыт")}
-            className="flex-1 bg-status-danger-muted text-status-danger font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] border border-status-danger/20"
+            className="flex-1 min-w-[45%] bg-status-danger-muted text-status-danger font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] border border-status-danger/20"
           >
             Открыть спор
           </button>
