@@ -17,12 +17,14 @@ const BottomNav = () => {
   const hiddenExact = ["/create", "/dispute", "/auth"];
   const isDealScreen = location.pathname.startsWith("/deal/");
   const isCheckoutScreen = location.pathname.startsWith("/checkout/");
+  const isWalletFlow = location.pathname.startsWith("/wallet/");
   const isChatThread = /^\/chat\/.+/.test(location.pathname);
 
   if (
     hiddenExact.includes(location.pathname) ||
     isDealScreen ||
     isCheckoutScreen ||
+    isWalletFlow ||
     isChatThread
   ) {
     return null;

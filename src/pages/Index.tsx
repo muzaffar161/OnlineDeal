@@ -18,8 +18,6 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
 };
 
-type MoneyModalMode = "topup" | "withdraw" | "transfer" | null;
-
 const formatMoney = (value: number) =>
   `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -29,7 +27,7 @@ const Dashboard = () => {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [deals, setDeals] = useState<DealDto[]>([]);
   const [wallet, setWallet] = useState<WalletBalanceDto | null>(null);
-  const [modal, setModal] = useState<MoneyModalMode>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [amountInput, setAmountInput] = useState("");
   const [transferQuery, setTransferQuery] = useState("");
   const [transferResults, setTransferResults] = useState<UserSearchResultDto[]>([]);
@@ -59,7 +57,7 @@ const Dashboard = () => {
   }, [user?.userId, loadWallet]);
 
   useEffect(() => {
-    if (modal !== "transfer") return;
+    if (!transferOpen) return;
     const q = transferQuery.trim();
     if (q.length < 1) {
       setTransferResults([]);
@@ -72,49 +70,38 @@ const Dashboard = () => {
         .catch(() => setTransferResults([]));
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [transferQuery, modal]);
+  }, [transferQuery, transferOpen]);
 
   const activeDeals = useMemo(() => deals.filter((d) => [1, 2, 3, 4, 7].includes(d.status)).slice(0, 4), [deals]);
   const available = wallet?.availableBalance ?? 0;
   const frozen = wallet?.frozenBalance ?? 0;
   const total = available + frozen;
 
-  const openModal = (mode: Exclude<MoneyModalMode, null>) => {
-    setModal(mode);
+  const openTransfer = () => {
+    setTransferOpen(true);
     setAmountInput("");
     setTransferQuery("");
     setTransferResults([]);
     setSelectedUser(null);
   };
 
-  const submitMoneyAction = async () => {
+  const submitTransfer = async () => {
     const amount = Number(amountInput);
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Введите сумму больше 0");
       return;
     }
+    if (!selectedUser) {
+      toast.error("Выберите получателя");
+      return;
+    }
 
     setSubmitting(true);
     try {
-      if (modal === "topup") {
-        const next = await walletApi.topUp(amount);
-        setWallet(next);
-        toast.success("Баланс пополнен (имитация)");
-      } else if (modal === "withdraw") {
-        const next = await walletApi.withdraw(amount);
-        setWallet(next);
-        toast.success("Вывод выполнен (имитация)");
-      } else if (modal === "transfer") {
-        if (!selectedUser) {
-          toast.error("Выберите получателя");
-          setSubmitting(false);
-          return;
-        }
-        const next = await walletApi.transfer(selectedUser.userId, amount);
-        setWallet(next);
-        toast.success(`Перевод @${selectedUser.username} выполнен`);
-      }
-      setModal(null);
+      const next = await walletApi.transfer(selectedUser.userId, amount);
+      setWallet(next);
+      toast.success(`Перевод @${selectedUser.username} выполнен`);
+      setTransferOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Операция не выполнена");
     } finally {
@@ -183,7 +170,7 @@ const Dashboard = () => {
         <div className="flex gap-3">
           <button
             type="button"
-            onClick={() => openModal("topup")}
+            onClick={() => navigate("/wallet/top-up")}
             className="flex-1 flex items-center justify-center gap-2 gradient-brand text-brand-foreground font-semibold py-3.5 rounded-2xl shadow-brand transition-all active:scale-[0.97] touch-manipulation"
           >
             <Plus className="w-4 h-4" />
@@ -191,7 +178,7 @@ const Dashboard = () => {
           </button>
           <button
             type="button"
-            onClick={() => openModal("transfer")}
+            onClick={openTransfer}
             className="flex-1 flex items-center justify-center gap-2 bg-white/10 text-white font-semibold py-3.5 rounded-2xl transition-all active:scale-[0.97] hover:bg-white/15 touch-manipulation"
           >
             <ArrowDownLeft className="w-4 h-4" />
@@ -200,7 +187,7 @@ const Dashboard = () => {
         </div>
         <button
           type="button"
-          onClick={() => openModal("withdraw")}
+          onClick={() => navigate("/wallet/withdraw")}
           className="w-full mt-3 text-sm text-white/60 hover:text-white/90 transition-colors py-1"
         >
           Вывести средства
@@ -255,69 +242,68 @@ const Dashboard = () => {
         </motion.div>
       </div>
 
-      {modal && (
+      {transferOpen && (
         <div className="fixed inset-0 z-[60] bg-black/45 flex items-end sm:items-center justify-center px-4 pb-safe">
-          <div className="w-full max-w-md bg-card rounded-t-3xl sm:rounded-3xl p-5 shadow-lg border border-border/70 space-y-4 mb-0 sm:mb-0">
+          <div className="w-full max-w-md bg-card rounded-t-3xl sm:rounded-3xl p-5 shadow-lg border border-border/70 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-card-foreground">
-                {modal === "topup" ? "Пополнение" : modal === "withdraw" ? "Вывод" : "Перевод"}
-              </h3>
-              <button type="button" onClick={() => setModal(null)} className="p-1 text-muted-foreground" aria-label="Закрыть">
+              <h3 className="text-lg font-bold text-card-foreground">Перевод</h3>
+              <button type="button" onClick={() => setTransferOpen(false)} className="p-1 text-muted-foreground" aria-label="Закрыть">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {modal === "transfer" && (
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Получатель</label>
-                <input
-                  value={selectedUser ? `@${selectedUser.username}` : transferQuery}
-                  onChange={(e) => {
-                    setSelectedUser(null);
-                    setTransferQuery(e.target.value);
-                  }}
-                  placeholder="@username или контакт"
-                  className="w-full bg-background rounded-2xl px-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand"
-                />
-                {!selectedUser && transferResults.length > 0 && (
-                  <div className="bg-background rounded-2xl border border-border overflow-hidden">
-                    {transferResults.map((u) => (
-                      <button
-                        key={u.userId}
-                        type="button"
-                        onClick={() => {
-                          setSelectedUser(u);
-                          setTransferQuery(u.username);
-                          setTransferResults([]);
-                        }}
-                        className="w-full text-left px-4 py-3 border-b border-border last:border-b-0 hover:bg-secondary/60"
-                      >
-                        <p className="text-sm font-semibold text-card-foreground">@{u.username}</p>
-                        <p className="text-xs text-muted-foreground">{u.contact}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="space-y-2">
+              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Получатель</label>
+              <input
+                value={selectedUser ? `@${selectedUser.username}` : transferQuery}
+                onChange={(e) => {
+                  setSelectedUser(null);
+                  setTransferQuery(e.target.value);
+                }}
+                placeholder="@username или контакт"
+                className="w-full bg-background rounded-2xl px-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand"
+              />
+              {!selectedUser && transferResults.length > 0 && (
+                <div className="bg-background rounded-2xl border border-border overflow-hidden">
+                  {transferResults.map((u) => (
+                    <button
+                      key={u.userId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(u);
+                        setTransferQuery(u.username);
+                        setTransferResults([]);
+                      }}
+                      className="w-full text-left px-4 py-3 border-b border-border last:border-b-0 hover:bg-secondary/60"
+                    >
+                      <p className="text-sm font-semibold text-card-foreground">@{u.username}</p>
+                      <p className="text-xs text-muted-foreground">{u.contact}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Сумма</label>
-              <input
-                value={amountInput}
-                onChange={(e) => setAmountInput(e.target.value)}
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                className="w-full bg-background rounded-2xl px-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand font-mono"
-              />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-mono font-bold">$</span>
+                <input
+                  value={amountInput}
+                  onChange={(e) => setAmountInput(e.target.value)}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-full bg-background rounded-2xl pl-9 pr-4 py-3.5 text-base text-card-foreground outline-none border border-border focus:border-brand font-mono"
+                />
+              </div>
             </div>
 
             <button
               type="button"
               disabled={submitting}
-              onClick={() => void submitMoneyAction()}
+              onClick={() => void submitTransfer()}
               className="w-full gradient-brand text-brand-foreground font-bold py-3.5 rounded-2xl disabled:opacity-60 touch-manipulation"
             >
               {submitting ? "Подождите..." : "Подтвердить"}

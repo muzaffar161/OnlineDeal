@@ -18,6 +18,7 @@ import Chat from "./pages/Chat";
 import ChatThread from "./pages/ChatThread";
 import Checkout from "./pages/Checkout";
 import AuthPage from "./pages/AuthPage";
+import WalletCardFlow from "./pages/WalletCardFlow";
 
 const queryClient = new QueryClient();
 
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="/deal/:id" element={<Protected><DealScreen /></Protected>} />
               <Route path="/create" element={<Protected><CreateDeal /></Protected>} />
               <Route path="/checkout/:dealId" element={<Protected><Checkout /></Protected>} />
+              <Route path="/wallet/:mode" element={<Protected><WalletCardFlow /></Protected>} />
               <Route path="/dispute" element={<Protected><DisputeScreen /></Protected>} />
               <Route path="/profile" element={<Protected><Profile /></Protected>} />
               <Route path="/chat" element={<Protected><Chat /></Protected>} />
