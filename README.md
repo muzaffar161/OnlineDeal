@@ -1,21 +1,21 @@
 # Online Deal — Mobile
 
-Мобильный клиент платформы **Online Deal** для безопасных сделок с эскроу.
+Mobile client for the **Online Deal** escrow platform.
 
-Этот каталог (`mobile/`) — отдельное мобильное веб-приложение (PWA).  
-Веб-версия живёт рядом в `deal-flow/` и развивается независимо.
+This directory (`mobile/`) is a standalone mobile web application (PWA).  
+The web product lives alongside it in `deal-flow/` and evolves independently.
 
 ---
 
 ## Repository
 
-Целевой репозиторий проекта:
+Project repository:
 
 ```text
 git@github.com:muzaffar161/OnlineDeal.git
 ```
 
-> **Статус:** локальная разработка. В ближайшее время `mobile/` будет подключён и влит в общий репозиторий `OnlineDeal` вместе с веб-клиентом и API.
+> **Status:** this mobile client is the current content of [OnlineDeal](https://github.com/muzaffar161/OnlineDeal). Web (`deal-flow/`) and API (`server/`) will be merged into the same monorepo next.
 
 ### Planned monorepo layout
 
@@ -42,13 +42,13 @@ OnlineDeal/
 
 ## Features
 
-- Авторизация / регистрация
-- Список и детали сделок
-- Создание сделки и checkout (Stripe)
-- Чат по сделке
-- Профиль и уведомления
-- Mobile-first UI (safe-area, bottom navigation)
-- PWA: установка на домашний экран
+- Authentication / registration
+- Deal list and deal details
+- Deal creation and Stripe checkout
+- Deal chat
+- Profile and notifications
+- Mobile-first UI (safe areas, bottom navigation)
+- PWA: install to home screen
 
 ---
 
@@ -78,7 +78,7 @@ VITE_API_BASE_URL=
 VITE_STRIPE_PUBLISHABLE_KEY=pk_test_xxx
 ```
 
-If `VITE_API_BASE_URL` is empty, the client resolves API as:
+If `VITE_API_BASE_URL` is empty, the client resolves the API as:
 
 ```text
 http://<current-hostname>:5038
@@ -114,7 +114,7 @@ npm run preview
 
 ## PWA
 
-После `build` / `preview` приложение можно установить:
+After `build` / `preview`, the app can be installed:
 
 - **iOS Safari** → Share → Add to Home Screen  
 - **Android Chrome** → Install app / Add to Home screen  
@@ -141,36 +141,37 @@ Session storage keys are scoped separately (`onlinedeal_mobile_*`), so web and m
 
 ### Near term
 
-- [ ] Push `mobile/` into [OnlineDeal](https://github.com/muzaffar161/OnlineDeal) monorepo
+- [x] Publish mobile client to [OnlineDeal](https://github.com/muzaffar161/OnlineDeal)
 - [ ] Align CI, env examples, and shared API contracts with `server/`
 - [ ] Polish PWA install flow and offline caching
+- [ ] Merge `deal-flow/` and `server/` into the monorepo
 
 ### Next major step — React Native
 
-Текущий `mobile/` — **временный mobile web / PWA слой**.
+The current `mobile/` app is a **temporary mobile web / PWA layer**.
 
-В скором времени планируется перенос на **React Native** (Expo), чтобы получить:
+A migration to **React Native** (Expo) is planned soon to unlock:
 
-- нативные билды под iOS / Android
-- доступ к store (App Store / Google Play)
-- нативные push-уведомления и device APIs
-- единый UX ближе к native apps
+- native iOS / Android builds
+- App Store / Google Play distribution
+- native push notifications and device APIs
+- UX closer to true native apps
 
-При миграции сохраним:
+During migration we will keep:
 
-- тот же backend (`server/`)
-- те же доменные сценарии (сделки, чат, оплата)
-- максимум переиспользуемой бизнес-логики / API-слоя
+- the same backend (`server/`)
+- the same domain flows (deals, chat, payments)
+- as much reusable business logic / API layer as possible
 
-PWA останется переходным решением до стабильного React Native релиза.
+PWA remains the transitional solution until a stable React Native release.
 
 ---
 
 ## Contributing notes
 
-1. Не смешивать изменения web (`deal-flow`) и mobile (`mobile`) в одном PR без необходимости.
-2. API-контракты менять через `server/` + синхронизацию клиентов.
-3. Перед PR: `npm run lint && npm test && npm run build`.
+1. Do not mix web (`deal-flow`) and mobile (`mobile`) changes in the same PR unless necessary.
+2. Change API contracts via `server/` and sync both clients.
+3. Before opening a PR: `npm run lint && npm test && npm run build`.
 
 ---
 
